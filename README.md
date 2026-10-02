@@ -1,5 +1,12 @@
 # MOVIE: Interpretable Synthesis of Late-Frame [¹¹C]-PiB PET from Early-Frame Counterparts
 
+![Paper](https://img.shields.io/badge/Paper-EJNMMI%20Physics%202026-blue)
+<!-- TODO: after publication, wrap the badge above with the DOI link:
+[![Paper](https://img.shields.io/badge/Paper-EJNMMI%20Physics%202026-blue)](https://doi.org/REPLACE_WITH_DOI) -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.6-EE4C2C?logo=pytorch&logoColor=white)
+
 Official implementation of the paper:
 
 > **A PET MOVIE for Interpretable Synthesis of Late-Frame [¹¹C]-PiB PET Images from Early-Frame Counterparts**  
