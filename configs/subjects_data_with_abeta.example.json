@@ -1,0 +1,17 @@
+{
+    "patient001": {
+        "Diagnosis": "AD",
+        "Instrument": "GE",
+        "Amyloid beta": 1
+    },
+    "patient002": {
+        "Diagnosis": "HTN",
+        "Instrument": "SIEMENS",
+        "Amyloid beta": 0
+    },
+    "patient003": {
+        "Diagnosis": "CAA_CI",
+        "Instrument": "GE",
+        "Amyloid beta": 1
+    }
+}

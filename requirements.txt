@@ -1,0 +1,30 @@
+# Deep Learning
+# Install the CUDA build of PyTorch first from the official PyTorch index (see README);
+# a CUDA build such as 2.6.0+cu118 satisfies this pin.
+torch==2.6.0
+
+# SDE / ODE solvers
+torchsde==0.2.6
+torchdiffeq==0.2.5
+
+# Mamba (State Space Model)
+mamba-ssm==2.2.4
+
+# Network building blocks (nnU-Net)
+dynamic-network-architectures==0.3.1
+
+# Image quality metrics
+lpips==0.1.4
+torchmetrics==1.6.1
+
+# Data processing
+numpy>=1.24.0
+scipy>=1.10.0
+opencv-python>=4.7.0
+pandas>=2.0.0
+
+# Visualization & logging
+matplotlib>=3.7.0
+seaborn>=0.12.0
+colorama>=0.4.6
+tqdm>=4.65.0

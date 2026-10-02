@@ -1,0 +1,42 @@
+# Training outputs
+runs/
+*.pth
+*.pt
+*.ckpt
+*.csv
+*.npy
+
+# Medical images and data
+*.nii
+*.nii.gz
+*.dcm
+*.h5
+*.mat
+Preprocessed_*/
+
+# Subject-level configuration files (not distributed; see configs/*.example.*)
+configs/subjects_data_with_abeta.json
+configs/stratified_5fold_all.json
+configs/subject_stats_*.csv
+!configs/*.example.*
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environments
+.conda/
+.venv/
+.env
+*.log
+wandb/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
