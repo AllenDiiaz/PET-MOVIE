@@ -262,7 +262,7 @@ The bottleneck feature map is evolved through a stochastic (or deterministic) di
 
 ### Loss Function
 ```
-L = MSE + (1 - SSIM)/2 + LPIPS + λ_sm · ∫||f(z)||² dt + λ_cons · (1 - cos_sim(early, mid))
+L = MSE + (1 − SSIM)/2 + LPIPS + λ_sm · mean(z(1)²) + λ_cons · (1 − cos(γ, β))
 ```
 
 with λ_sm = 5e-4 and λ_cons = 1.

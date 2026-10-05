@@ -139,7 +139,12 @@ def guide_dropout(mid_5d: torch.Tensor | None,
 class ImageFlowNetLoss(nn.Module):
     """
     L = wm * MSE + ws * (1 - SSIM)/2 + wl * LPIPS
-        + w_sm * ∫||f(z,t)||² dt + w_c * (1 - cos_sim(early, mid))
+        + w_sm * mean(z(1)²) + w_c * (1 - cos(gamma, beta))
+
+    z(1) is the latent at the end of the SDE/ODE integration. cos(gamma, beta) is the
+    cosine similarity of the FiLM parameters along the channel dimension, computed per
+    pixel and averaged; this term is only added when gamma and beta are given
+    (i.e. when mid frames are used).
     """
     def __init__(
         self,
@@ -170,16 +175,16 @@ class ImageFlowNetLoss(nn.Module):
         self,
         pred:  torch.Tensor,
         tgt:   torch.Tensor,
-        drift: torch.Tensor | None = None,
-        early: torch.Tensor | None = None,
-        mid:   torch.Tensor | None = None,
+        z_T:   torch.Tensor | None = None,
+        gamma: torch.Tensor | None = None,
+        beta:  torch.Tensor | None = None,
     ) -> torch.Tensor:
         mse  = self.mse(pred, tgt)
         ssim = (1.0 - ssim_fn(pred, tgt, data_range=1.0)) * 0.5
         if self.resize_lpips and pred.size(1) == 1:
-            lpips_val = self.lpips(self._to_rgb(pred), self._to_rgb(tgt), normalize=True).mean()
+            lpips_val = self.lpips(self._to_rgb(pred), self._to_rgb(tgt)).mean()
         else:
-            lpips_val = self.lpips(pred, tgt, normalize=True).mean()
+            lpips_val = self.lpips(pred, tgt).mean()
 
         loss = (
             self.mse_w   * mse  +
@@ -187,13 +192,13 @@ class ImageFlowNetLoss(nn.Module):
             self.lpips_w * lpips_val
         )
 
-        if drift is not None:          # drift = ∫‖f‖²/D dt per sample (already squared during integration)
-            loss = loss + self.w_sm * drift.mean()
+        if z_T is not None:            # z_T = z(1), latent at the end of the integration
+            loss = loss + self.w_sm * z_T.pow(2).mean()
 
-        if (early is not None) and (mid is not None):
-            e = F.normalize(early, p=2, dim=1)
-            m = F.normalize(mid,   p=2, dim=1)
-            loss = loss + self.w_c * (1.0 - (e * m).sum(1).mean())
+        if (gamma is not None) and (beta is not None):
+            g = F.normalize(gamma, p=2, dim=1)
+            b = F.normalize(beta,  p=2, dim=1)
+            loss = loss + self.w_c * (1.0 - (g * b).sum(1).mean())
 
         return loss
 
@@ -250,6 +255,7 @@ def train_and_validate(model          : nn.Module,
                        valid_loader   : DataLoader,
                        optimizer,
                        warmup_sched,
+                       epoch_sched,
                        num_epochs     : int,
                        save_path      : str | Path,
                        fold           : int,
@@ -288,8 +294,8 @@ def train_and_validate(model          : nn.Module,
 
             mid = guide_dropout(mid, p_full=p_full)
 
-            pred, drift, early_lat, mid_lat = model(x, t=torch.tensor(1.0, device=device), mid_pet=mid)
-            loss = criterion_tr(pred, tgt, drift, early_lat, mid_lat) / acc_steps
+            pred, z_T, gamma, beta = model(x, t=torch.tensor(1.0, device=device), mid_pet=mid)
+            loss = criterion_tr(pred, tgt, z_T, gamma, beta) / acc_steps
             loss.backward()
 
             mse_b = F.mse_loss(pred, tgt).item() * x.size(0)
@@ -318,15 +324,15 @@ def train_and_validate(model          : nn.Module,
                 tgt = batch['ground_truth'].float().to(device)
                 x, tgt = squeeze_early(x), squeeze_early(tgt)
 
-                pred, drift, early_lat, mid_lat = model(
+                pred, z_T, gamma, beta = model(
                     x, t=torch.tensor(1.0, device=device), mid_pet=None)
                 bs = x.size(0); nsamp += bs
 
-                val_loss_sum += criterion_tr(pred, tgt, drift, early_lat, mid_lat).item() * bs
+                val_loss_sum += criterion_tr(pred, tgt, z_T, gamma, beta).item() * bs
                 psnr += calc_psnr(pred, tgt, data_range=1.).item() * bs
                 ssim += ssim_fn(pred.clamp(0,1), tgt.clamp(0,1), data_range=1.).item() * bs
                 lp   += lpips_val(pred.expand(-1,3,-1,-1),
-                                  tgt.expand(-1,3,-1,-1), normalize=True).mean().item() * bs
+                                  tgt.expand(-1,3,-1,-1)).mean().item() * bs
                 mse_sum += F.mse_loss(pred, tgt).item() * bs
 
         psnr /= nsamp; ssim /= nsamp; lp /= nsamp
@@ -340,6 +346,9 @@ def train_and_validate(model          : nn.Module,
               f"train-MSE {train_mse:.5f} | "
               f"val-MSE {val_mse:.5f} | "
               f"PSNR {psnr:.2f}  SSIM {ssim:.4f}  LPIPS {lp:.4f}")
+
+        # ReduceLROnPlateau driven by the validation SSIM
+        epoch_sched.step(ssim)
 
         h_tr.append(train_loss)
         h_val.append(val_loss)
@@ -470,6 +479,15 @@ if __name__ == "__main__":
         warmup_fn    = lambda it: min(1., it / 2_000)
         warmup_sched = lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_fn)
 
+        plateau_sched = lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode='max',            # validation SSIM, higher is better
+            factor=0.5,
+            patience=10,
+            threshold=1e-4,
+            cooldown=5,
+        )
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         fold_dir  = Path(base_path) / f"LKMU{args.model.upper()}_F{fold}_{timestamp}"   # LKMUSDE_ / LKMUODE_
         fold_dir.mkdir(parents=True, exist_ok=True)
@@ -477,6 +495,7 @@ if __name__ == "__main__":
         train_and_validate(
             model, train_loader, valid_loader,
             optimizer, warmup_sched,
+            epoch_sched=plateau_sched,
             num_epochs=args.epochs,
             save_path=fold_dir,
             fold=fold,

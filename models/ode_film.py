@@ -1,9 +1,10 @@
 # LKMUNet-ODE-FiLM
 # ================================================================
 #  - Sigmoid on the decoder output (output ∈ [0, 1])
-#  - Drift clamped to [-3, 3] to keep the ODE stable; kinetic
-#    regularization ∫‖f‖² dt is accumulated through an augmented state
-#  - FiLM: gamma = tanh(·), beta = 0.1·tanh(·)
+#  - Drift clamped to [-3, 3] to keep the ODE stable; the latent at the end
+#    of the ODE integration, z(1), is returned and regularized in the loss by mean(z(1)²)
+#  - FiLM: gamma = tanh(·), beta = 0.1·tanh(·); gamma and beta are returned
+#    for the consistency loss 1 - cos(gamma, beta)
 #  - Fixed-step Euler solver, 8 steps
 # ================================================================
 import torch, torch.nn as nn, torch.nn.functional as F
@@ -33,17 +34,14 @@ class SpatialODEFunc(nn.Module):
     def set_film(self, gamma, beta):
         self.gamma, self.beta = gamma, beta
 
-    # state = [z | E], dE/dt = mean(f²) → E(T) = ∫‖f‖²/D dt (kinetic energy)
-    def forward(self, t, x_aug):                      # d[z|E]/dt
-        x_flat = x_aug[:, :-1]
+    def forward(self, t, x_flat):                     # dz/dt
         B, D = x_flat.shape; H = W = int((D // self.C) ** .5)
         x = x_flat.view(B, self.C, H, W)
         out = self.conv(x)
         if self.gamma is not None:
             out = self.gamma * out + self.beta
         out = torch.clamp(out, -3., 3.)                 # clamp drift to [-3, 3]
-        fz = out.flatten(1)
-        return torch.cat([fz, fz.pow(2).mean(1, keepdim=True)], 1)
+        return out.flatten(1)
 
 # ────────────────── ODEBlock ────────────────────────────────────
 class ODEBlock(nn.Module):
@@ -54,16 +52,14 @@ class ODEBlock(nn.Module):
     def forward(self, x_map, int_t, gamma=None, beta=None):
         self.func.set_film(gamma, beta)
         B, C, H, W = x_map.shape
-        x0 = torch.cat([x_map.flatten(1), x_map.new_zeros(B, 1)], 1)
-        kw = dict(method=self.method, rtol=self.rtol, atol=self.atol,
-                  options=dict(step_size=1. / self.N))
-        if self.adjoint:   # gamma, beta are not parameters of func; pass them explicitly via adjoint_params
-            film = tuple(p for p in (gamma, beta) if p is not None and p.requires_grad)
-            out = odeint_adjoint(self.func, x0, int_t,
-                      adjoint_params=tuple(self.func.parameters()) + film, **kw)
-        else:
-            out = odeint(self.func, x0, int_t, **kw)
-        return out[-1, :, :-1].view(B, C, H, W), out[-1, :, -1]   # z_T, kinetic[B]
+        x0 = x_map.flatten(1)
+        odeint_fn = odeint_adjoint if self.adjoint else odeint
+        out = odeint_fn(
+            self.func, x0, int_t,
+            method=self.method, rtol=self.rtol, atol=self.atol,
+            options=dict(step_size=1. / self.N)
+        )
+        return out[-1].view(B, C, H, W)                     # z(1)
 
 # ────────────────── Main model (ODE block) ───────────────────────
 class LKMUNetODE_FiLM(nn.Module):
@@ -97,7 +93,7 @@ class LKMUNetODE_FiLM(nn.Module):
     # -------- gamma / beta ----------------------------------------------
     def _prepare_film(self, mid_pet: torch.Tensor, hw: Tuple[int, int]):
         if self.mid_encoder is None:
-            return None, None, None
+            return None, None
         if mid_pet.ndim == 5:
             B, M, C0, H, W = mid_pet.shape
         else:
@@ -135,7 +131,7 @@ class LKMUNetODE_FiLM(nn.Module):
 
         gamma = torch.tanh(self.film_gamma(mid_feat))
         beta  = 0.1 * torch.tanh(self.film_beta(mid_feat))
-        return gamma, beta, mid_feat
+        return gamma, beta
 
     # -------- forward ----------------------------------------------------
     def forward(self, early_pet, t, *, mid_pet=None):
@@ -144,18 +140,18 @@ class LKMUNetODE_FiLM(nn.Module):
         x_low = self.down_pool(self.reduce_conv(x_bot))     # [B, sde_dim, h/2, w/2]
         Hp, Wp = x_low.shape[2:]
 
-        gamma = beta = mid_feat = None
+        gamma = beta = None
         if (mid_pet is not None) and (self.mid_encoder is not None):
-            gamma, beta, mid_feat = self._prepare_film(mid_pet, (Hp, Wp))
+            gamma, beta = self._prepare_film(mid_pet, (Hp, Wp))
 
         t_val = float(t.item()) if isinstance(t, torch.Tensor) else float(t)
         int_t = torch.tensor([0., t_val], device=early_pet.device, dtype=early_pet.dtype)
-        x_low_out, kinetic = self.ode_block(x_low, int_t, gamma, beta)
-        skips[-1] = self.up_bridge(x_low_out).contiguous()  # back to [B, C, h, w]
+        z_T = self.ode_block(x_low, int_t, gamma, beta)     # z(1), end of the ODE integration
+        skips[-1] = self.up_bridge(z_T).contiguous()        # back to [B, C, h, w]
 
         pred = self.backbone.decoder(skips)
         pred = torch.sigmoid(pred)
-        return pred, kinetic, x_low, mid_feat
+        return pred, z_T, gamma, beta
 
 # ────────────────── Builder (mid-encoder shares the backbone architecture) ────────────────
 def build_lkmunet_ode_film(cfg: dict, *, strategy="auto"):
