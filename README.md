@@ -1,8 +1,7 @@
 # MOVIE: Interpretable Synthesis of Late-Frame [¹¹C]-PiB PET from Early-Frame Counterparts
 
-![Paper](https://img.shields.io/badge/Paper-EJNMMI%20Physics%202026-blue)
-<!-- TODO: after publication, wrap the badge above with the DOI link:
-[![Paper](https://img.shields.io/badge/Paper-EJNMMI%20Physics%202026-blue)](https://doi.org/REPLACE_WITH_DOI) -->
+[![Paper](https://img.shields.io/badge/Paper-EJNMMI%20Physics%202026-blue)](https://doi.org/10.1186/s40658-026-00910-3)
+[![DOI](https://img.shields.io/badge/DOI-10.1186%2Fs40658--026--00910--3-blue)](https://doi.org/10.1186/s40658-026-00910-3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.6-EE4C2C?logo=pytorch&logoColor=white)
@@ -10,7 +9,7 @@
 Official implementation of the paper:
 
 > **A PET MOVIE for Interpretable Synthesis of Late-Frame [¹¹C]-PiB PET Images from Early-Frame Counterparts**  
-> *EJNMMI Physics, 2026 (in press)*
+> *EJNMMI Physics*, 2026. [https://doi.org/10.1186/s40658-026-00910-3](https://doi.org/10.1186/s40658-026-00910-3)
 
 ![MOVIE pipeline](figures/MOVIE.gif)
 
@@ -29,9 +28,7 @@ LPIPS, MSE). It does not include: PET preprocessing (SPM12), slice extraction an
 normalization statistics, the UNet baseline, SUVR/Centiloid ROI analysis, outlier quality
 control, statistical tests (Shapiro-Wilk, Wilcoxon, FDR), Bland-Altman, Glass's Δ, ROC/DCA
 analyses, the early-frame timing sensitivity analysis, or the trajectory visualization.
-These analyses are described in detail in the paper (link will be added upon publication).
-<!-- TODO: replace the sentence above with the DOI link, e.g.
-These analyses are described in detail in the [paper](https://doi.org/10.xxxx/xxxxx). -->
+These analyses are described in detail in the [paper](https://doi.org/10.1186/s40658-026-00910-3).
 
 Image metrics are computed per 2D slice on min-max-normalized images (`data_range = 1`),
 averaged per subject, and reported as mean ± SD across subjects.
@@ -307,7 +304,8 @@ If you use this code, please cite our paper:
   author  = {Tsai, Bo-Wei and Lin, Yu-Nong and Lin, Hsin-Ta and Li, Yi-Shih and Huang, Guan-Lin and
              Liu, Chia-Ju and Ko, Chi-Lun and Yen, Ruoh-Fang and Tsai, Hsin-Hsi and Chen, Kevin T.},
   journal = {EJNMMI Physics},
-  year    = {2026}
+  year    = {2026},
+  doi     = {10.1186/s40658-026-00910-3}
 }
 ```
 
